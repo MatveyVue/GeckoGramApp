@@ -178,7 +178,8 @@ export default {
   padding: 32px 20px 24px;
   background: linear-gradient(135deg, #0a7c3a 0%, #0e8a44 100%);
   color: white;
-  height: 350px;
+  height: 50%;
+  max-height: 450px;
 }
 
 .avatar-wrapper {

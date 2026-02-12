@@ -1,0 +1,212 @@
+body {
+  background-color: rgb(255, 255, 255);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background-attachment: fixed;
+  user-select: none;
+  scrollbar-width: none; 
+  overflow-y: scroll;
+  height: 100vh;
+  width: 100%;
+  overflow-x: hidden;
+  margin: 0;
+  padding: 0;
+  /* Запрещаем масштабирование */
+  touch-action: pan-y pan-x;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Для всех элементов внутри body запрещаем зумирование */
+* {
+  touch-action: pan-y pan-x;
+  -webkit-touch-callout: none;
+}
+
+/* Для input и textarea разрешаем зумирование при фокусе */
+input, textarea, select, button {
+  touch-action: auto;
+  font-size: 16px; /* Предотвращает автоматический зум на iOS */
+}
+
+.continue-btn {
+  background-color: rgb(14, 101, 24);
+  color: white;
+  font-size: 16px;
+  border: none;
+  border-radius: 15px;
+  width: 95%;
+  max-width: 400px;
+  height: 50px;
+  position: absolute;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  bottom: 0;
+  margin-bottom: 20px;
+}
+
+.phone-input {
+  width: 95%;
+  max-width: 400px;
+  height: 50px;
+  border-radius: 15px;
+  border: 1px solid #ccc;
+  padding-left: 15px;
+  font-size: 16px;
+  box-sizing: border-box;
+}
+
+.password-input {
+  width: 95%;
+  max-width: 400px;
+  height: 50px;
+  border-radius: 15px;
+  border: 1px solid #ccc;
+  padding-left: 15px;
+  font-size: 16px;
+  box-sizing: border-box;
+  margin-top: 10px;
+}
+
+.nav-bar {
+  display: flex;
+  justify-content: space-around;
+  padding: 13px;
+  background: rgb(255, 255, 255, 0.6);
+  border-radius: 30px;
+  margin-top: 20px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.03);
+  position: fixed;
+  bottom: 20px;
+  width: 80%;
+  max-width: 400px;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  bottom: 0;
+  margin-bottom: 5px;
+  height: 60px;
+}
+
+.nav-btn {
+  background: none;
+  border: none;
+  font-size: 22px;
+  cursor: pointer;
+  padding: 6px 13px;
+  border-radius: 20px;
+  color: #666;
+  height: 40px;
+  margin-top: 1px;
+  margin-left: -7px;
+}
+
+.nav-btn.active {
+  background: #4CAF50;
+  color: white;
+}
+
+.profile-info {
+  background-color: rgb(237, 237, 237, 0.6);
+  border-radius: 15px;
+  padding: 15px;
+  margin-top: 20px;
+  text-align: left;
+  width: 80%;
+  max-width: 400px;
+  margin-left: auto;
+  margin-right: auto;
+  height: 120px;
+}
+
+.profile-phone {
+  font-size: 18px;
+  color: #555;
+  margin-top: -4px;
+}
+
+.phone {
+  font-size: 16px;
+  color: rgb(14, 101, 24);
+  margin-top: -10px;
+}
+
+.profile-username {
+  font-size: 18px;
+  color: #555;
+  margin-top: -10px;
+}
+
+.username {
+  font-size: 16px;
+  color: rgb(14, 101, 24);
+  margin-top: -10px;
+}
+
+.footer {
+  background-color: rgb(237, 237, 237, 0.6);
+  width: 90%;
+  height: 40px;
+  border-radius: 25px;
+  margin-top: 20px;
+  max-width: 430px;
+  text-align: center;
+  align-items: center;
+  display: flex;
+  justify-content: space-around;
+}
+
+.gifts-footer {
+  background-color: rgb(14, 101, 24, 0.6);
+  border: none;
+  width: 50%;
+  height: 40px;
+  border-radius: 25px;
+}
+
+.gifts-container {
+  background-color: rgb(237, 237, 237, 0.6);
+  border-radius: 15px;
+  padding: 15px;
+  margin-top: 20px;
+  width: 30%;
+  max-width: 150px;
+  margin-left: auto;
+  margin-right: auto;
+  float: left;
+  margin-left: 6%;
+}
+
+.stickers-footer {
+  background-color: rgb(237, 237, 237, 0.6);
+  border: none;
+  width: 50%;
+  height: 40px;
+  border-radius: 25px;
+}
+
+
+#preloader {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: white;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+
+.loader {
+  width: 50px;
+  height: 50px;
+  border: 5px solid #f3f3f3;
+  border-top: 5px solid #4CAF50;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}

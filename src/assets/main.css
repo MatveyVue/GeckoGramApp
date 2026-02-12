@@ -10,22 +10,44 @@ body {
   overflow-x: hidden;
   margin: 0;
   padding: 0;
-  /* Запрещаем масштабирование */
-  touch-action: pan-y pan-x;
+  /* Запрещаем масштабирование - УСИЛЕННАЯ ВЕРСИЯ */
+  touch-action: manipulation; /* Вместо pan-y pan-x */
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
+  -ms-touch-action: manipulation; /* Для IE/Edge */
+  touch-action: manipulation; /* Полный запрет жестов */
 }
 
-/* Для всех элементов внутри body запрещаем зумирование */
+/* Для всех элементов */
 * {
-  touch-action: pan-y pan-x;
+  touch-action: manipulation; /* Запрещаем любые жесты, включая зум */
   -webkit-touch-callout: none;
+  -webkit-user-select: none; /* Запрещаем выделение */
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
 }
 
-/* Для input и textarea разрешаем зумирование при фокусе */
+/* Для input и textarea - разрешаем ввод */
 input, textarea, select, button {
   touch-action: auto;
+  -webkit-user-select: auto;
+  -moz-user-select: auto;
+  -ms-user-select: auto;
+  user-select: auto;
   font-size: 16px; /* Предотвращает автоматический зум на iOS */
+}
+
+/* Дополнительная защита от зума */
+@media (max-width: 768px) {
+  input[type="text"],
+  input[type="number"],
+  input[type="tel"],
+  input[type="password"],
+  textarea,
+  select {
+    font-size: 16px !important; /* Принудительно 16px для предотвращения зума */
+  }
 }
 
 .continue-btn {

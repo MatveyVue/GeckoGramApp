@@ -11,7 +11,7 @@
         <span class="online-badge"></span>
       </div>
       <h1 class="profile-name">{{ currentUserName }}</h1>
-      <p class="profile-phone">+333 {{ formatPhone(currentUserPhone) }}</p>
+      <p class="profile-phone">+{{ formatPhone(currentUserPhone) }}</p>
       <p class="profile-username">@{{ currentUserName }}</p>
       <p class="profile-bio">GeckoGram user 🦎</p>
     </div>

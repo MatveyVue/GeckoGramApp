@@ -184,6 +184,10 @@
       <button class="close-viewer">×</button>
     </div>
 
+<p style="color: white;">.</p>
+<p style="color: white;">.</p>
+<p style="color: white;">.</p>
+
     <!-- Навигация -->
     <div class="nav-bar">
       <button class="nav-btn">🏠</button>

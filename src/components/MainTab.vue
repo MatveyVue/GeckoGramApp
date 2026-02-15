@@ -3,7 +3,7 @@
     <!-- Шапка профиля -->
     <div class="profile-header">
       <div class="user-info">
-        <img :src="userAvatar" class="user-avatar" alt="avatar">
+        <img :src="defaultAvatar" class="user-avatar" alt="avatar">
         <div class="user-details">
           <h2 class="user-name">{{ currentUserName }}</h2>
           <p class="user-phone">{{ formatPhone(currentUserPhone) }}</p>
@@ -14,7 +14,7 @@
     <!-- Форма поста с фото и рисовалкой -->
     <div class="post-form">
       <div class="post-form-header">
-        <img :src="userAvatar" class="post-avatar" alt="avatar">
+        <img :src="defaultAvatar" class="post-avatar" alt="avatar">
         <span class="post-author">{{ currentUserName }}</span>
       </div>
       
@@ -88,16 +88,16 @@
         </div>
         <button 
           @click="addPost" 
-          :disabled="!newPost.trim() && !imageFile && !drawingImage"
+          :disabled="!newPost.trim() && !imageFile && !drawingImage || isPosting"
           class="post-btn"
         >
-          📤 Опубликовать
+          {{ isPosting ? '⏳' : '📤 Опубликовать' }}
         </button>
       </div>
     </div>
 
     <!-- Лента постов -->
-    <div class="posts-feed">
+    <div class="posts-feed" @scroll="handleScroll" ref="postsContainer">
       <div v-if="loading" class="loading">
         <div class="spinner"></div>
       </div>
@@ -111,9 +111,9 @@
       <div v-else v-for="post in posts" :key="post.id" class="post-card">
         <div class="post-header">
           <div class="post-user" @click="viewProfile(post.userId)">
-            <img :src="post.userAvatar" class="post-user-avatar" alt="avatar">
+            <img :src="defaultAvatar" class="post-user-avatar" alt="avatar" loading="lazy">
             <div class="post-user-info">
-              <span class="post-user-name">{{ post.userName }}</span>
+              <span class="post-user-name">{{ post.userName || 'Пользователь' }}</span>
               <span class="post-time">{{ formatTime(post.time) }}</span>
             </div>
           </div>
@@ -130,33 +130,37 @@
         <div class="post-content">
           <p v-if="post.text && post.text !== ' '" class="post-text">{{ post.text }}</p>
           <div v-if="post.image" class="post-image-wrapper">
-            <img :src="post.image" class="post-image" @click="viewImage(post.image)">
+            <img :src="post.image" class="post-image" loading="lazy" @click="viewImage(post.image)">
           </div>
         </div>
 
         <div class="post-footer">
-          <button @click="likePost(post.id)" class="like-btn" :class="{ 'liked': post.likes?.includes(currentUserPhone) }">
+          <button @click="likePost(post.id)" class="like-btn" :class="{ 'liked': post.liked }">
             <span class="like-icon">❤️</span>
-            <span class="like-count">{{ post.likes?.length || 0 }}</span>
+            <span class="like-count">{{ post.likesCount || 0 }}</span>
           </button>
         </div>
       </div>
+      
+      <!-- Индикатор загрузки -->
+      <div v-if="loadingMore" class="loading-more">
+        <div class="spinner small"></div>
+      </div>
     </div>
 
-    <!-- Модалка профиля - ТОЛЬКО ИНФО, БЕЗ ПОДПИСОК -->
+    <!-- Модалка профиля -->
     <div v-if="showProfileModal" class="profile-modal" @click.self="showProfileModal = false">
       <div class="profile-modal-content">
         <button class="close-modal" @click="showProfileModal = false">×</button>
         
         <div v-if="selectedUser" class="selected-profile">
           <div class="selected-profile-header">
-            <img :src="selectedUser.avatar" class="selected-profile-avatar">
-            <h2 class="selected-profile-name">{{ selectedUser.name }}</h2>
+            <img :src="defaultAvatar" class="selected-profile-avatar" loading="lazy">
+            <h2 class="selected-profile-name">{{ selectedUser.name || 'Пользователь' }}</h2>
             <p class="selected-profile-phone">{{ formatPhone(selectedUser.phone) }}</p>
-            <p class="selected-profile-username">@{{ selectedUser.username || selectedUser.name }}</p>
+            <p class="selected-profile-username">@{{ selectedUser.username || selectedUser.name || 'user' }}</p>
           </div>
 
-          <!-- ТОЛЬКО ПОСТЫ, БЕЗ ПОДПИСОК -->
           <div class="selected-profile-stats">
             <div class="stat-item">
               <span class="stat-value">{{ selectedUser.posts || 0 }}</span>
@@ -167,17 +171,20 @@
           <div class="selected-profile-bio" v-if="selectedUser.bio">
             {{ selectedUser.bio }}
           </div>
+          <div class="selected-profile-bio" v-else>
+            Пользователь GeckoGram 🦎
+          </div>
         </div>
       </div>
     </div>
 
     <!-- Просмотр изображения -->
     <div v-if="showImageViewer" class="image-viewer" @click="showImageViewer = false">
-      <img :src="selectedImage" class="viewer-image">
+      <img :src="selectedImage" class="viewer-image" loading="lazy">
       <button class="close-viewer">×</button>
     </div>
 
-    <!-- НАВИГАЦИЯ - ИСПРАВЛЕНО -->
+    <!-- Навигация -->
     <div class="nav-bar">
       <button class="nav-btn">🏠</button>
       <button class="nav-btn active">💬</button>
@@ -200,10 +207,17 @@ import {
   deleteDoc,
   arrayUnion,
   arrayRemove,
-  getDoc,
   getDocs,
-  where 
+  where,
+  startAfter
 } from 'firebase/firestore';
+
+// Кеш для пользователей
+const userCache = new Map();
+const POSTS_LIMIT = 20;
+let lastVisible = null;
+let loadingMore = false;
+let hasMore = true;
 
 export default {
   name: 'MainTab',
@@ -217,16 +231,18 @@ export default {
       default: ''
     }
   },
+  emits: ['go-to-profile', 'restore-session'], // Добавлено событие restore-session
   data() {
     return {
       newPost: '',
       posts: [],
       loading: true,
+      loadingMore: false,
       showImageViewer: false,
       selectedImage: '',
       showProfileModal: false,
       selectedUser: null,
-      userAvatar: `https://png.pngtree.com/png-vector/20241101/ourmid/pngtree-green-gecko-on-wall-png-image_14205413.png`,
+      defaultAvatar: `https://png.pngtree.com/png-vector/20241101/ourmid/pngtree-green-gecko-on-wall-png-image_14205413.png`,
       imageFile: null,
       imagePreview: '',
       showCanvas: false,
@@ -234,61 +250,179 @@ export default {
       brushSize: 5,
       currentColor: '#000000',
       drawingImage: null,
-      canvasContext: null
+      canvasContext: null,
+      isPosting: false,
+      likeDebounce: new Map(),
+      unsubscribe: null,
+      sessionChecked: false
     }
   },
   mounted() {
+    console.log('MainTab mounted with props:', {
+      phone: this.currentUserPhone,
+      name: this.currentUserName
+    });
+    
+    // Проверяем сессию при загрузке
+    this.checkSession();
     this.loadPosts();
-    this.loadUserAvatar();
+  },
+  beforeUnmount() {
+    if (this.unsubscribe) {
+      this.unsubscribe();
+    }
+    this.likeDebounce.clear();
   },
   methods: {
-    // Загрузка аватара пользователя
-    async loadUserAvatar() {
-      try {
-        const userRef = doc(db, 'users', this.currentUserPhone);
-        const userSnap = await getDoc(userRef);
-        if (userSnap.exists()) {
-          const userData = userSnap.data();
-          this.userAvatar = userData.cap || userData.avatar || this.userAvatar;
-        }
-      } catch (error) {
-        console.error('Ошибка загрузки аватара:', error);
+    // Проверка сессии
+    checkSession() {
+      const savedPhone = localStorage.getItem('userPhone');
+      const savedName = localStorage.getItem('userName');
+      const savedId = localStorage.getItem('userId');
+      
+      console.log('Проверка сессии:', { savedPhone, savedName, savedId });
+      console.log('Текущие props:', { 
+        phone: this.currentUserPhone, 
+        name: this.currentUserName 
+      });
+      
+      // Если есть сохраненная сессия, но нет props - эмитим событие для восстановления
+      if (savedPhone && savedName && !this.currentUserPhone) {
+        console.log('⚠️ Сессия есть в localStorage, но нет в props - восстанавливаем');
+        this.$emit('restore-session', {
+          phone: savedPhone,
+          name: savedName,
+          id: savedId
+        });
+      } else if (this.currentUserPhone) {
+        // Если есть props, но нет в localStorage - сохраняем
+        console.log('✅ Сохраняем сессию в localStorage');
+        localStorage.setItem('userPhone', this.currentUserPhone);
+        localStorage.setItem('userName', this.currentUserName);
       }
+      
+      this.sessionChecked = true;
     },
 
     // Загрузка постов
     loadPosts() {
-      const postsRef = collection(db, 'posts');
-      const q = query(postsRef, orderBy('time', 'desc'), limit(50));
+      this.loading = true;
       
-      onSnapshot(q, async (snapshot) => {
-        this.posts = [];
-        for (const docSnap of snapshot.docs) {
-          const post = { id: docSnap.id, ...docSnap.data() };
-          
-          // Загружаем информацию о пользователе
-          if (post.userId) {
-            try {
-              const userRef = doc(db, 'users', post.userId);
-              const userSnap = await getDoc(userRef);
-              if (userSnap.exists()) {
-                const userData = userSnap.data();
-                post.userName = userData.name || `User_${post.userId.slice(-4)}`;
-                post.userAvatar = userData.cap || userData.avatar || `https://i.pravatar.cc/150?img=${Math.floor(Math.random() * 70)}`;
-                post.userBio = userData.bio || '';
-              }
-            } catch (error) {
-              console.error('Ошибка загрузки пользователя:', error);
-            }
-          }
-          
-          this.posts.push(post);
+      const postsRef = collection(db, 'posts');
+      const q = query(postsRef, orderBy('time', 'desc'), limit(POSTS_LIMIT));
+      
+      this.unsubscribe = onSnapshot(q, async (snapshot) => {
+        if (snapshot.empty) {
+          this.loading = false;
+          return;
         }
+        
+        lastVisible = snapshot.docs[snapshot.docs.length - 1];
+        hasMore = snapshot.docs.length === POSTS_LIMIT;
+        
+        const userIds = [...new Set(snapshot.docs.map(doc => doc.data().userId))];
+        await this.loadUsersData(userIds);
+        
+        this.posts = snapshot.docs.map(docSnap => {
+          const data = docSnap.data();
+          const user = userCache.get(data.userId) || {};
+          
+          return {
+            id: docSnap.id,
+            ...data,
+            userName: user.name || `User_${data.userId?.slice(-4) || '??'}`,
+            liked: data.likes?.includes(this.currentUserPhone) || false,
+            likesCount: data.likes?.length || 0
+          };
+        });
+        
         this.loading = false;
       });
     },
 
-    // ========== РИСОВАЛКА С ПОДДЕРЖКОЙ TOUCH ==========
+    // Загрузка данных пользователей
+    async loadUsersData(userIds) {
+      const uniqueIds = [...new Set(userIds.filter(id => id && !userCache.has(id)))];
+      
+      if (uniqueIds.length === 0) return;
+      
+      const batches = [];
+      for (let i = 0; i < uniqueIds.length; i += 10) {
+        const batch = uniqueIds.slice(i, i + 10);
+        const q = query(collection(db, 'users'), where('phone', 'in', batch));
+        batches.push(getDocs(q));
+      }
+      
+      try {
+        const results = await Promise.all(batches);
+        results.forEach(snapshot => {
+          snapshot.docs.forEach(doc => {
+            const userData = doc.data();
+            if (userData.phone) {
+              userCache.set(userData.phone, {
+                name: userData.name,
+                username: userData.username,
+                bio: userData.bio
+              });
+            }
+          });
+        });
+      } catch (error) {
+        console.error('Ошибка загрузки пользователей:', error);
+      }
+    },
+
+    // Загрузка следующих постов
+    async loadMorePosts() {
+      if (loadingMore || !hasMore || !lastVisible) return;
+      
+      loadingMore = true;
+      this.loadingMore = true;
+      
+      try {
+        const postsRef = collection(db, 'posts');
+        const q = query(
+          postsRef, 
+          orderBy('time', 'desc'), 
+          startAfter(lastVisible),
+          limit(POSTS_LIMIT)
+        );
+        
+        const snapshot = await getDocs(q);
+        
+        if (!snapshot.empty) {
+          lastVisible = snapshot.docs[snapshot.docs.length - 1];
+          hasMore = snapshot.docs.length === POSTS_LIMIT;
+          
+          const userIds = [...new Set(snapshot.docs.map(doc => doc.data().userId))];
+          await this.loadUsersData(userIds);
+          
+          const newPosts = snapshot.docs.map(docSnap => {
+            const data = docSnap.data();
+            const user = userCache.get(data.userId) || {};
+            
+            return {
+              id: docSnap.id,
+              ...data,
+              userName: user.name || `User_${data.userId?.slice(-4) || '??'}`,
+              liked: data.likes?.includes(this.currentUserPhone) || false,
+              likesCount: data.likes?.length || 0
+            };
+          });
+          
+          this.posts = [...this.posts, ...newPosts];
+        } else {
+          hasMore = false;
+        }
+      } catch (error) {
+        console.error('Ошибка загрузки постов:', error);
+      } finally {
+        loadingMore = false;
+        this.loadingMore = false;
+      }
+    },
+
+    // Рисовалка
     openCanvas() {
       this.showCanvas = true;
       this.imageFile = null;
@@ -314,7 +448,6 @@ export default {
       this.currentColor = color;
     },
 
-    // Mouse события
     startDrawing(e) {
       this.drawing = true;
       const ctx = this.canvasContext;
@@ -333,7 +466,6 @@ export default {
       ctx.moveTo(e.offsetX, e.offsetY);
     },
 
-    // Touch события для мобильных устройств
     startDrawingTouch(e) {
       e.preventDefault();
       this.drawing = true;
@@ -389,9 +521,8 @@ export default {
       this.imageFile = 'drawing';
       this.showCanvas = false;
     },
-    // ========== КОНЕЦ РИСОВАЛКИ ==========
 
-    // Обработка загрузки изображения
+    // Загрузка фото
     handleImageUpload(event) {
       const file = event.target.files[0];
       if (!file) return;
@@ -401,8 +532,8 @@ export default {
         return;
       }
       
-      if (file.size > 5 * 1024 * 1024) {
-        alert('Размер файла не должен превышать 5MB');
+      if (file.size > 2 * 1024 * 1024) {
+        alert('Размер файла не должен превышать 2MB');
         return;
       }
       
@@ -416,33 +547,33 @@ export default {
       reader.readAsDataURL(file);
     },
 
-    // Удаление изображения
     removeImage() {
       this.imageFile = null;
       this.imagePreview = '';
       this.drawingImage = null;
     },
 
-    // Добавление поста с фото/рисунком (base64)
+    // Добавление поста
     async addPost() {
+      if (this.isPosting) return;
       if (!this.newPost.trim() && !this.imageFile && !this.drawingImage) {
         alert('Напишите текст или добавьте фото/рисунок');
         return;
       }
+      
+      this.isPosting = true;
       
       try {
         let imageUrl = '';
         
         if (this.drawingImage) {
           imageUrl = this.drawingImage;
-        } else if (this.imageFile) {
+        } else if (this.imageFile && this.imageFile !== 'drawing') {
           imageUrl = await this.fileToBase64(this.imageFile);
         }
         
         await addDoc(collection(db, 'posts'), {
           userId: this.currentUserPhone,
-          userName: this.currentUserName,
-          userAvatar: this.userAvatar,
           text: this.newPost.trim() || ' ',
           image: imageUrl,
           time: Date.now(),
@@ -456,137 +587,148 @@ export default {
       } catch (error) {
         console.error('Ошибка добавления поста:', error);
         alert('Не удалось опубликовать пост');
+      } finally {
+        this.isPosting = false;
       }
     },
 
-    // Конвертация файла в base64
     fileToBase64(file) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.readAsDataURL(file);
         reader.onload = () => resolve(reader.result);
-        reader.onerror = (error) => reject(error);
+        reader.onerror = reject;
       });
     },
 
-    // Лайк поста
-    async likePost(postId) {
-      try {
-        const postRef = doc(db, 'posts', postId);
-        const postSnap = await getDoc(postRef);
-        
-        if (postSnap.exists()) {
-          const likes = postSnap.data().likes || [];
+    // Лайк с дебаунсом
+    likePost(postId) {
+      if (this.likeDebounce.has(postId)) return;
+      
+      this.likeDebounce.set(postId, setTimeout(async () => {
+        try {
+          const postRef = doc(db, 'posts', postId);
+          const post = this.posts.find(p => p.id === postId);
           
-          if (likes.includes(this.currentUserPhone)) {
-            await updateDoc(postRef, {
-              likes: arrayRemove(this.currentUserPhone)
-            });
-          } else {
-            await updateDoc(postRef, {
-              likes: arrayUnion(this.currentUserPhone)
-            });
+          if (post) {
+            if (post.liked) {
+              await updateDoc(postRef, {
+                likes: arrayRemove(this.currentUserPhone)
+              });
+            } else {
+              await updateDoc(postRef, {
+                likes: arrayUnion(this.currentUserPhone)
+              });
+            }
           }
+        } catch (error) {
+          console.error('Ошибка лайка:', error);
+        } finally {
+          this.likeDebounce.delete(postId);
         }
-      } catch (error) {
-        console.error('Ошибка лайка:', error);
-      }
+      }, 300));
     },
 
     // Удаление поста
     async deletePost(postId) {
-      if (confirm('Удалить пост?')) {
-        try {
-          await deleteDoc(doc(db, 'posts', postId));
-        } catch (error) {
-          console.error('Ошибка удаления:', error);
-        }
+      if (!confirm('Удалить пост?')) return;
+      
+      try {
+        await deleteDoc(doc(db, 'posts', postId));
+      } catch (error) {
+        console.error('Ошибка удаления:', error);
       }
     },
 
     // Просмотр профиля
     async viewProfile(userId) {
-      if (!userId) {
-        console.log('❌ Нет userId');
-        return;
-      }
+      if (!userId) return;
+      
+      console.log('Открытие профиля:', userId);
       
       try {
-        console.log('👤 Открытие профиля по номеру:', userId);
+        let userData = userCache.get(userId);
         
-        const usersRef = collection(db, 'users');
-        const q = query(usersRef, where('phone', '==', userId));
-        const querySnapshot = await getDocs(q);
-        
-        if (!querySnapshot.empty) {
-          const userDoc = querySnapshot.docs[0];
-          const userData = userDoc.data();
+        if (!userData) {
+          const usersRef = collection(db, 'users');
+          const q = query(usersRef, where('phone', '==', userId));
+          const querySnapshot = await getDocs(q);
           
-          console.log('✅ Найден пользователь:', userData);
-          
-          // Получаем количество постов
-          let postsCount = 0;
-          try {
-            const postsRef = collection(db, 'posts');
-            const postsQuery = query(postsRef, where('userId', '==', userId));
-            const postsSnap = await getDocs(postsQuery);
-            postsCount = postsSnap.size;
-          } catch (error) {
-            console.error('Ошибка загрузки постов:', error);
+          if (!querySnapshot.empty) {
+            const userDoc = querySnapshot.docs[0];
+            userData = userDoc.data();
+            userCache.set(userId, {
+              name: userData.name,
+              username: userData.username,
+              bio: userData.bio
+            });
+            console.log('Найден пользователь:', userData);
           }
+        }
+        
+        if (userData) {
+          const postsCount = this.posts.filter(p => p.userId === userId).length;
           
           this.selectedUser = {
             phone: userId,
             name: userData.name || `User_${userId.slice(-4)}`,
-            avatar: userData.cap || userData.avatar || `https://i.pravatar.cc/150?img=${Math.floor(Math.random() * 70)}`,
             username: userData.username || userData.name,
-            bio: userData.bio || 'Пользователь GeckoGram 🦎',
+            bio: userData.bio,
             posts: postsCount
           };
           
           this.showProfileModal = true;
-          console.log('✅ Профиль загружен:', this.selectedUser.name);
         } else {
-          console.log('❌ Пользователь с номером', userId, 'не найден');
-          alert('Пользователь не найден');
+          console.log('Пользователь не найден');
+          this.selectedUser = {
+            phone: userId,
+            name: `User_${userId.slice(-4)}`,
+            username: `user_${userId.slice(-4)}`,
+            bio: 'Пользователь GeckoGram 🦎',
+            posts: this.posts.filter(p => p.userId === userId).length
+          };
+          this.showProfileModal = true;
         }
       } catch (error) {
-        console.error('❌ Ошибка загрузки профиля:', error);
-        alert('Ошибка при загрузке профиля');
+        console.error('Ошибка загрузки профиля:', error);
       }
     },
 
-    // Просмотр изображения
     viewImage(url) {
       this.selectedImage = url;
       this.showImageViewer = true;
     },
 
-    // Форматирование времени
+    // Форматирование
     formatTime(timestamp) {
       if (!timestamp) return '';
       
-      const date = new Date(timestamp);
-      const now = new Date();
-      const diff = Math.floor((now - date) / 1000);
+      const diff = Date.now() - timestamp;
       
-      if (diff < 60) return 'только что';
-      if (diff < 3600) return `${Math.floor(diff / 60)}м назад`;
-      if (diff < 86400) return `${Math.floor(diff / 3600)}ч назад`;
-      if (diff < 604800) return `${Math.floor(diff / 86400)}д назад`;
+      if (diff < 60000) return 'только что';
+      if (diff < 3600000) return `${Math.floor(diff / 60000)}м назад`;
+      if (diff < 86400000) return `${Math.floor(diff / 3600000)}ч назад`;
+      if (diff < 604800000) return `${Math.floor(diff / 86400000)}д назад`;
+      
+      const date = new Date(timestamp);
       return `${date.getDate()}.${date.getMonth() + 1}.${date.getFullYear()}`;
     },
 
-    // Форматирование телефона
     formatPhone(phone) {
       if (!phone) return '';
       const clean = phone.replace(/\D/g, '');
       if (clean.length >= 9) {
         return `+${clean.slice(0, 3)} ${clean.slice(3, 6)} ${clean.slice(6, 9)}`;
-      } else if (clean.length >= 6) {
-        return `+${clean.slice(0, 3)} ${clean.slice(3, 6)}`;
       }
       return phone;
+    },
+
+    // Обработка скролла
+    handleScroll(e) {
+      const container = e.target;
+      if (container.scrollHeight - container.scrollTop - container.clientHeight < 200) {
+        this.loadMorePosts();
+      }
     }
   }
 }
